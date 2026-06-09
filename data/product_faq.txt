@@ -1,0 +1,31 @@
+GreenLeaf Bistro — Customer Experience FAQ
+
+Q: What are your most popular menu items?
+A: Our top sellers are the Avocado Toast, Garden Bowl, and Cold Brew Coffee. Seasonal specials like the Mango Smoothie Bowl and Mushroom Flatbread also perform well during summer months.
+
+Q: What is your average wait time?
+A: We target under 10 minutes for counter orders during off-peak hours. Peak hours (12–1 PM, 6–8 PM) may see 15–20 minute waits. We staff up during peak periods and use a digital queue system to manage flow.
+
+Q: How do you handle complaints?
+A: All complaints are escalated to the shift manager within 15 minutes. Refunds or replacements are offered for quality issues. Repeat complaints about the same issue trigger an operational review within 48 hours.
+
+Q: What is your CSAT target?
+A: We aim for a CSAT of 4.5+. Scores below 4.0 trigger a root-cause review with the operations team. Monthly trend reports are shared with all branch managers.
+
+Q: How do you measure food quality?
+A: Food quality is reviewed via weekly audits by the kitchen lead, mystery shopper visits once a month, and CSAT scores filtered by food-related keywords. A score below 4.0 on food-specific surveys initiates a supplier review.
+
+Q: What is your staff training policy?
+A: All new staff complete a 2-week onboarding covering food handling, customer service scripts, and complaint resolution. Refresher training is mandatory every quarter.
+
+Q: How do you manage peak hour operations?
+A: We deploy a queue management system and assign a dedicated expeditor during peak times. Pre-orders via the mobile app are prioritized. If wait times exceed 20 minutes, a complimentary drink voucher is offered.
+
+Q: What channels do customers use to give feedback?
+A: Feedback is collected via mobile app surveys, web forms, in-store kiosks, and post-visit email surveys. All channels feed into our central analytics dashboard in real time.
+
+Q: What is the CSAT scoring methodology?
+A: CSAT is measured on a 1–5 scale. Scores 4 and 5 are considered satisfied responses. The CSAT percentage = (satisfied responses / total responses) * 100. We report both raw average rating and CSAT%.
+
+Q: How do you handle negative trends?
+A: A decline of 0.3 or more in average rating month-over-month triggers an automated alert to the regional manager. A task force is assembled within 72 hours to identify root causes and deploy fixes.
