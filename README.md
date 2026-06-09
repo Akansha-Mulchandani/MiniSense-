@@ -5,6 +5,9 @@
 ```bash
 git clone https://github.com/Akansha-Mulchandani/MiniSense-.git
 cd MiniSense-
+python -m venv venv
+venv\Scripts\activate          # Windows
+# or: source venv/bin/activate  # Linux/Mac
 pip install -r requirements.txt
 python generate_data.py        # generates 100k survey records
 python main.py --eval          # runs 3 sample eval questions
