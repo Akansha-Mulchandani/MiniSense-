@@ -3,6 +3,8 @@
 ## Setup & Run
 
 ```bash
+git clone https://github.com/Akansha-Mulchandani/MiniSense-.git
+cd MiniSense-
 pip install -r requirements.txt
 python generate_data.py        # generates 100k survey records
 python main.py --eval          # runs 3 sample eval questions
@@ -75,9 +77,9 @@ Orchestrator Agent (orchestrator.py)
 
 | Question | Retrieved chunks quality | Notes |
 |---|---|---|
-| Top 3 complaints vs last month | ✅ Retrieved CSAT target + complaint handling chunks | Works well — keyword overlap is high |
-| CSAT score vs target | ✅ Retrieved CSAT methodology + target chunk | Excellent — direct match |
-| Why unhappy with wait time | ✅ Retrieved wait time + peak hours chunk | Good retrieval, but FAQ is thin on root-cause detail |
+| Top 3 complaints vs last month | Retrieved CSAT target + complaint handling chunks | Works well — keyword overlap is high |
+| CSAT score vs target |  Retrieved CSAT methodology + target chunk | Excellent — direct match |
+| Why unhappy with wait time | Retrieved wait time + peak hours chunk | Good retrieval, but FAQ is thin on root-cause detail |
 
 **Where retrieval falls short:** The FAQ doesn't contain enough operational detail for root-cause questions (e.g., "why is wait time long on Tuesdays?"). Adding more operational data to the FAQ corpus would improve this.
 
