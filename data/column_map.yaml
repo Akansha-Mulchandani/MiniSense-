@@ -1,0 +1,11 @@
+input_field: free_text
+label_field: label
+label_map:
+  "Positive – Food Quality": 0
+  "Negative – Food Quality": 1
+  "Positive – Wait Time": 2
+  "Negative – Wait Time": 3
+  "Positive – Staff": 4
+  "Negative – Staff": 5
+  "Positive – Ambiance": 6
+  "Negative – Ambiance": 7

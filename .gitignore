@@ -1,6 +1,7 @@
 venv/
 chroma_db/
 data/survey_responses.json
+models/
 __pycache__/
 *.pyc
 *.pyo

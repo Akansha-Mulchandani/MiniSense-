@@ -17,10 +17,8 @@ python main.py --ask "What are the top complaints this month?"
 ```
 
 API usage:
-```bash
-curl -X POST http://localhost:8000/ask \
-  -H "Content-Type: application/json" \
-  -d '{"question": "What is our CSAT this month vs last month?"}'
+```powershell
+Invoke-RestMethod -Method POST -Uri "http://localhost:8000/ask" -ContentType "application/json" -Body '{"question": "What is our CSAT this month vs last month?"}'
 ```
 Response format: `{"question": "...", "sub_tasks": [...], "data_output": {...}, "rag_output": {...}, "final_answer": "..."}`
 
@@ -124,6 +122,21 @@ Classify 10,000 survey responses/day into 8 categories (e.g., *Positive – Food
 - Store training data as JSONL with a schema-versioned `input` field (not hardcoded survey field names)
 - The training script reads a `column_map.yaml` that maps raw fields to `{input_text, label}` — swapping data sources only requires updating the YAML
 - Use a pipeline wrapper class so the inference interface is model-agnostic: `Classifier.predict(text: str) -> {label, confidence}` 
+
+---
+
+## Fine-Tuning Implementation
+
+# Generate labels from existing survey data (rule-based, no API needed)
+python generate_labels.py        # creates data/labeled_responses.jsonl
+
+# Fine-tune distilbert on 2400 labeled samples
+python finetune.py               # saves model to models/classifier/
+                                 # prints macro F1 + per-class F1 on test set
+
+# Classify via API (model must be trained first)
+Invoke-RestMethod -Method POST -Uri "http://localhost:8000/classify" -ContentType "application/json" -Body '{"text": "The wait was too long and staff was rude"}'
+# Returns: {"label": "Negative – Wait Time", "confidence": 0.91}
 
 ---
 

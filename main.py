@@ -21,10 +21,29 @@ app = FastAPI(title="MiniSense Survey Analysis Agent")
 class QuestionRequest(BaseModel):
     question: str
 
+class ClassifyRequest(BaseModel):
+    text: str
+
 @app.post("/ask")
 def ask(req: QuestionRequest):
     result = orchestrate(OrchestratorInput(question=req.question))
     return result.model_dump()
+
+@app.post("/classify")
+def classify(req: ClassifyRequest):
+    import os
+    from classifier import Classifier
+    
+    model_path = "models/classifier/"
+    if not os.path.exists(model_path):
+        return {"error": "Model not trained yet. Run finetune.py first."}
+    
+    try:
+        classifier = Classifier(model_path=model_path)
+        result = classifier.predict(req.text)
+        return result
+    except Exception as e:
+        return {"error": f"Classification failed: {str(e)}"}
 
 @app.get("/health")
 def health():
