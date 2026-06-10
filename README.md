@@ -97,31 +97,106 @@ Classify 10,000 survey responses/day into 8 categories (e.g., *Positive – Food
 - Augment with back-translation (translate to Spanish → back to English) to increase diversity on minority classes
 - **Estimate needed:** ~300–400 examples per class = ~2,400–3,200 total for solid performance on a 8-class classification task with short texts
 
-### Model & Technique
-- **Base model:** `distilbert-base-uncased` or `roberta-base` — both are fast, small, and excel at short-text classification
-- **Technique:** Full fine-tuning of the classification head + last 2 transformer layers (not full FT, not LoRA). Rationale: the task is classification (not generation), so we don't need parameter-efficient generation tuning. Full FT on just the top layers converges fast and is cheap on a single GPU for a ~66M param model
-- For larger base models (e.g., Mistral-7B), use QLoRA (4-bit quantization + LoRA) to fit on a single 24GB GPU
+## Part 3 — Fine-Tuning Design
 
-### Training Pipeline
-- **Tooling:** Hugging Face `Trainer` + `datasets` library
-- Training config: batch size 32, lr 2e-5, 5 epochs, early stopping on validation F1
-- Data split: 80/10/10 train/val/test, stratified by class
-- Experiment tracking: MLflow or W&B (free tier)
+### Problem Statement
+omniSense processes 10,000 survey responses per day and needs to classify free-text feedback into 8 categories (Positive/Negative × 4 aspects: Food Quality, Wait Time, Staff, Ambiance). Using GPT-4o at scale ($0.03 per request) costs $300/day = $9,000/month — unsustainable. A fine-tuned local model can classify at <$1/month compute cost.
 
-### Evaluation
-- **Metrics:** Per-class F1, macro F1, confusion matrix
-- **Go/no-go threshold:** Macro F1 ≥ 0.88 on held-out test set AND ≥ 0.85 on a manually curated "hard cases" set
-- Shadow deploy: run fine-tuned model in parallel with GPT-4o for 48 hours, compare outputs on live traffic before cutover
+### Data Strategy (Questions 1 & 4)
 
-### Serving
-- Export fine-tuned adapter as ONNX for low-latency inference
-- Deploy as a separate `/classify` microservice (FastAPI + `optimum` inference) behind the same API gateway
-- Use a feature flag to route traffic: `classifier_v2` flag routes to fine-tuned model, keeping existing routes untouched
+**Bootstrap Phase:**
+- Start with **500 labeled examples** via GPT-4o (one-time cost: ~$15)
+- Use rule-based keyword matching to auto-label **100k survey responses** into 8 classes
+- Validate label quality via confidence scoring (flag <0.6 confidence for human review)
 
-### Future-Proofing
-- Store training data as JSONL with a schema-versioned `input` field (not hardcoded survey field names)
-- The training script reads a `column_map.yaml` that maps raw fields to `{input_text, label}` — swapping data sources only requires updating the YAML
-- Use a pipeline wrapper class so the inference interface is model-agnostic: `Classifier.predict(text: str) -> {label, confidence}` 
+**Active Learning Iteration:**
+- Train initial model on 2,400–3,200 stratified samples (300–400 per class)
+- Run model on unlabeled data; select **low-confidence predictions** for human review
+- Iteratively expand labeled set to ~5,000–10,000 samples
+- Each iteration: +100 manually-labeled samples improve minority class performance
+
+**Data Distribution:** 
+- Stratified sampling ensures all 8 classes equally represented (12.5% each)
+- Train/Val/Test split: 70/10/20 with stratification per label
+- Back-translation augmentation for minority classes if needed (translate Spanish ↔ English)
+
+### Model & Technique Selection (Question 2)
+
+**Base Model:** `distilbert-base-uncased` (66M params)
+- Fast (100ms inference on CPU)
+- Excellent on short-text classification
+- Fits on single GPU with batch size 64
+- Inference easily exported to ONNX for production
+
+**Fine-Tuning Approach:** Full FT on classification head + last 2 layers
+- Rationale: Task is classification (not generation), so full parameter tuning is appropriate
+- Simpler than LoRA, converges faster on small datasets
+- For larger models (7B+), use QLoRA (4-bit quantization + LoRA) to fit in 24GB VRAM
+
+### Training Pipeline (Question 3)
+
+**Framework:** Hugging Face `Trainer` + `datasets`
+- Batch size: 64 (maximize GPU utilization)
+- Learning rate: 2e-5 (DistilBERT standard)
+- Epochs: 1–3 (early stopping on validation F1 ≥ 0.88)
+- Mixed precision (fp16): 2x speedup on modern GPUs
+- Training time: ~15–30 minutes on single GPU
+
+**Experiment Tracking:** MLflow or Weights & Biases free tier
+- Log per-class F1, confusion matrices, training loss
+- Version models and hyperparameters for reproducibility
+
+### Evaluation & Readiness (Question 4)
+
+**Go/No-Go Metrics:**
+- Macro F1 ≥ 0.88 on held-out test set
+- Minimum per-class F1 ≥ 0.80 (no class left behind)
+- Inference latency <100ms on CPU
+
+**Validation Strategy:**
+- Evaluate on stratified test set (20% of labeled data, ~20k samples)
+- Manual review of misclassified samples to identify systematic errors
+- A/B test: shadow deploy fine-tuned model vs GPT-4o on live traffic for 48 hours
+- If fine-tuned accuracy ≥95% of GPT-4o accuracy, approve for production
+
+### Serving Strategy (Question 5)
+
+**Architecture:**
+- Export model to ONNX (`optimum` library) for low-latency inference
+- Deploy as `/classify` microservice (FastAPI + `transformers` inference)
+- Place behind same API gateway as existing `/ask` route
+- Use feature flag (`classifier_v2`) to route traffic without disrupting other routes
+
+**Fallback:**
+- If fine-tuned model fails, automatically route to GPT-4o (cost recovery)
+- Monitor inference latency and accuracy; auto-revert if <95% accuracy
+
+### Future-Proofing (Question 6)
+
+**Input/Output Agnosticity:**
+- Training script reads `column_map.yaml` (not hardcoded field names)
+- Supports any `{input_text, label}` schema — swappable data sources
+- Inference interface: `Classifier.predict(text: str) → {label, confidence}` (model-agnostic)
+
+**Iterative Improvement:**
+- Monthly re-training on accumulated labeled data
+- Active learning loop: low-confidence predictions → human review → retrain
+- Version control: save all models + training configs for rollback
+
+### Cost Analysis & Production Scaling (Implicit)
+
+**Per-Response Cost Breakdown:**
+- Fine-tuned model: $0.00001/request (negligible compute)
+- vs. GPT-4o: $0.00003/request
+- Daily savings: 10,000 × $0.00002 = $0.20/day = $73/year
+- ROI: Positive after 2 months of operation
+
+**Monthly Training Cost:**
+- GPU compute (1 epoch, 70k samples): ~$2 (spot instance)
+- Human labeling (active learning): ~$50 (for 500 edge cases)
+- Total: <$100/month vs. $9,000 for GPT-4o
+
+ 
 
 ---
 
