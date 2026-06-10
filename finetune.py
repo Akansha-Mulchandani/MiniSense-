@@ -8,8 +8,6 @@ import os
 from pathlib import Path
 from collections import Counter
 import numpy as np
-from sklearn.metrics import f1_score, classification_report
-from sklearn.model_selection import train_test_split
 from transformers import (
     AutoTokenizer,
     AutoModelForSequenceClassification,
@@ -28,36 +26,45 @@ LABEL_MAP = column_map["label_map"]
 ID_TO_LABEL = {v: k for k, v in LABEL_MAP.items()}
 NUM_LABELS = len(LABEL_MAP)
 
-def load_labeled_data():
-    """Load labeled responses from JSONL."""
+def load_split_data(split_name="train"):
+    """Load pre-split labeled responses from JSONL.
+    
+    Args:
+        split_name: One of 'train', 'val', 'test'
+    """
     data = []
-    with open("data/labeled_responses.jsonl", "r") as f:
+    path = f"data/labeled_responses_{split_name}.jsonl"
+    with open(path, "r") as f:
         for line in f:
             data.append(json.loads(line))
     return data
 
-def stratified_sample(data, samples_per_class=300):
-    """Take a stratified sample ensuring equal samples per class."""
-    # Group by label
-    label_groups = {}
-    for item in data:
-        label = item["label"]
-        if label not in label_groups:
-            label_groups[label] = []
-        label_groups[label].append(item)
+def compute_f1(predictions, labels):
+    """Simple F1 computation without sklearn."""
+    # Macro F1: average F1 per class
+    class_f1_scores = {}
     
-    # Sample from each group
-    sampled = []
-    for label, items in label_groups.items():
-        if len(items) >= samples_per_class:
-            sampled.extend(np.random.choice(items, samples_per_class, replace=False))
-        else:
-            # If not enough samples, take all and oversample
-            sampled.extend(items)
-            needed = samples_per_class - len(items)
-            sampled.extend(np.random.choice(items, needed, replace=True))
+    # Get unique labels
+    unique_labels = set(labels)
     
-    return sampled
+    for label_id in unique_labels:
+        # True positives, false positives, false negatives for this class
+        tp = sum(1 for p, l in zip(predictions, labels) if p == label_id and l == label_id)
+        fp = sum(1 for p, l in zip(predictions, labels) if p == label_id and l != label_id)
+        fn = sum(1 for p, l in zip(predictions, labels) if p != label_id and l == label_id)
+        
+        # Precision and recall
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        
+        # F1 for this class
+        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+        class_f1_scores[label_id] = f1
+    
+    # Macro F1: average across all classes
+    macro_f1 = np.mean(list(class_f1_scores.values())) if class_f1_scores else 0.0
+    
+    return macro_f1, class_f1_scores
 
 def tokenize_function(examples, tokenizer):
     """Tokenize the input texts."""
@@ -73,40 +80,27 @@ def compute_metrics(eval_pred):
     predictions, labels = eval_pred
     preds = np.argmax(predictions, axis=1)
     
-    macro_f1 = f1_score(labels, preds, average="macro")
-    per_class_f1 = f1_score(labels, preds, average=None)
+    macro_f1, class_f1_scores = compute_f1(preds.tolist(), labels.tolist())
     
     return {
         "macro_f1": macro_f1,
-        **{f"f1_class_{i}": score for i, score in enumerate(per_class_f1)},
+        **{f"f1_class_{i}": score for i, score in class_f1_scores.items()},
     }
 
 def main():
-    print("Loading labeled data...")
-    data = load_labeled_data()
-    print(f"Total labeled samples: {len(data)}")
-    
-    # Print label distribution
-    label_counts = Counter(item["label"] for item in data)
-    print("\nLabel distribution:")
-    for label, count in label_counts.most_common():
-        print(f"  {label}: {count}")
-    
-    # Stratified sample
-    print("\nTaking stratified sample (300 per class)...")
-    sampled = stratified_sample(data, samples_per_class=300)
-    print(f"Sampled {len(sampled)} records")
-    
-    # Split 80/10/10 train/val/test
-    print("\nSplitting data 80/10/10 train/val/test...")
-    train_data, temp_data = train_test_split(
-        sampled, test_size=0.2, stratify=[item["label_id"] for item in sampled], random_state=42
-    )
-    val_data, test_data = train_test_split(
-        temp_data, test_size=0.5, stratify=[item["label_id"] for item in temp_data], random_state=42
-    )
+    print("Loading pre-split labeled data...")
+    train_data = load_split_data("train")
+    val_data = load_split_data("val")
+    test_data = load_split_data("test")
     
     print(f"Train: {len(train_data)}, Val: {len(val_data)}, Test: {len(test_data)}")
+    print(f"Total samples: {len(train_data) + len(val_data) + len(test_data)}")
+    
+    # Print label distribution
+    print("\nTrain set label distribution:")
+    label_counts = Counter(item["label"] for item in train_data)
+    for label, count in label_counts.most_common():
+        print(f"  {label}: {count}")
     
     # Create datasets
     train_dataset = Dataset.from_list(train_data)
@@ -153,20 +147,21 @@ def main():
     
     training_args = TrainingArguments(
         output_dir=output_dir,
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         save_strategy="epoch",
         learning_rate=2e-5,
-        per_device_train_batch_size=16,
-        per_device_eval_batch_size=16,
-        num_train_epochs=3,
+        per_device_train_batch_size=64,
+        per_device_eval_batch_size=64,
+        num_train_epochs=1,
         weight_decay=0.01,
         load_best_model_at_end=True,
         metric_for_best_model="macro_f1",
         greater_is_better=True,
-        logging_dir=f"{output_dir}/logs",
-        logging_steps=10,
-        save_total_limit=2,
+        logging_steps=50,
+        save_total_limit=1,
         report_to="none",  # Disable wandb/mlflow
+        fp16=True,  # Mixed precision - 2x faster
+        optim="adamw_torch_fused",  # Fused optimizer
     )
     
     # Initialize Trainer
@@ -187,15 +182,17 @@ def main():
     print("\nEvaluating on test set...")
     test_results = trainer.evaluate(test_dataset)
     
-    print("\n=== Test Set Results ===")
+    print("\n" + "="*70)
+    print("TEST SET RESULTS")
+    print("="*70)
     print(f"Macro F1: {test_results['eval_macro_f1']:.4f}")
     
     # Print per-class F1
     print("\nPer-class F1:")
     for i in range(NUM_LABELS):
         label_name = ID_TO_LABEL[i]
-        f1_score = test_results.get(f"eval_f1_class_{i}", 0.0)
-        print(f"  {label_name}: {f1_score:.4f}")
+        f1 = test_results.get(f"eval_f1_class_{i}", 0.0)
+        print(f"  {label_name:30s}: {f1:.4f}")
     
     # Save model
     print(f"\nSaving model to {output_dir}...")
@@ -206,7 +203,9 @@ def main():
     with open(f"{output_dir}/label_map.json", "w") as f:
         json.dump(LABEL_MAP, f, indent=2)
     
-    print("\nFine-tuning complete!")
+    print("\n✓ Fine-tuning complete!")
+    print(f"Model saved to: {output_dir}")
+    print(f"Ready to test with: python main.py --serve")
 
 if __name__ == "__main__":
     main()
