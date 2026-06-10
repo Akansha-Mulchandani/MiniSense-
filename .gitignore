@@ -1,6 +1,10 @@
 venv/
 chroma_db/
 data/survey_responses.json
+data/labeled_responses.jsonl
+data/labeled_responses_train.jsonl
+data/labeled_responses_val.jsonl
+data/labeled_responses_test.jsonl
 models/
 __pycache__/
 *.pyc
